@@ -270,43 +270,66 @@ pub async fn query_messages_for_account(
     ton: TonClient,
     account: &str,
     number: u32,
-) -> Result<Vec<(String, String)>, String> {
-    let messages = query_with_limit(
-        ton.clone(),
-        "messages",
-        json!({ "dst": { "eq": account } }),
-        "boc, id created_at",
-        Some(vec![OrderBy {
-            path: "created_at".to_string(),
-            direction: SortDirection::DESC,
-        }]),
-        Some(number),
-    )
-    .await
-    .map_err(|e| format!("failed to query messages data: {}", e))?;
-    if messages.is_empty() {
-        Err("message for the specified account were not found.".to_string())
-    } else {
-        let mut res = vec![];
-        for msg in messages {
-            res.push((
-                msg["boc"]
+) -> Result<Vec<(String, String, u64)>, String> {
+    let mut res: Vec<(String, String, u64)> = vec![];
+    let mut last_created: Option<u64> = None;
+    'ext: loop {
+        let start = last_created.unwrap_or(u64::MAX);
+        let rest = 50;
+        let messages = query_with_limit(
+            ton.clone(),
+            "messages",
+            json!({
+            "dst": { "eq": account },
+            "created_at": { "lt": start }
+        }),
+            "boc, id, created_at, created_lt(format: DEC)",
+            Some(vec![OrderBy {
+                path: "created_at".to_string(),
+                direction: SortDirection::DESC,
+            }]),
+            Some(rest),
+        )
+            .await
+            .map_err(|e| format!("failed to query messages data: {}", e))?;
+        if messages.is_empty() {
+            break;
+        } else {
+            let mut new_created = 0;
+            for msg in messages {
+                let boc = msg["boc"]
                     .as_str()
                     .ok_or(format!("Failed to get message boc"))?
-                    .to_string(),
-                format!(
-                    "id {} created_at {}",
-                    msg["id"]
-                        .as_str()
-                        .ok_or(format!("Failed to get message id"))?,
-                    msg["created_at"]
-                        .as_u64()
-                        .ok_or(format!("Failed to get message created_at"))?,
-                ),
-            ));
+                    .to_string();
+                let id = msg["id"]
+                    .as_str()
+                    .ok_or(format!("Failed to get message id"))?
+                    .to_string();
+                let created = msg["created_at"]
+                    .as_u64()
+                    .ok_or(format!("Failed to get message created_at"))?;
+                if res.iter().find(|el| (**el).1 == id).is_none() {
+                    res.push((boc, id, created));
+                    new_created = created;
+                    if res.len() == number as usize {
+                        break 'ext;
+                    }
+                }
+            }
+            if new_created == 0 {
+                break 'ext;
+            } else {
+                last_created = Some(new_created);
+            }
         }
+    }
+
+    if res.is_empty() {
+        Err("messages for the specified account were not found.".to_string())
+    } else {
         Ok(res)
     }
+
 }
 
 pub async fn query_message(ton: TonClient, message_id: &str) -> Result<String, String> {

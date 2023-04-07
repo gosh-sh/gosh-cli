@@ -71,7 +71,7 @@ pub fn create_decode_command<'a, 'b>() -> App<'a, 'b> {
                 .long("--abi")
                 .takes_value(true)
                 .help("Path or link to the contract ABI file or pure json ABI data. Can be specified in the config file.")))
-        .subcommand(SubCommand::with_name("account")
+        .subcommand(SubCommand::with_name("account_messages")
             .about("Decodes last N messages to the account.")
             .arg(Arg::with_name("ADDRESS")
                 .long("--addr")
@@ -127,7 +127,7 @@ pub async fn decode_command(m: &ArgMatches<'_>, config: &Config) -> Result<(), S
     if let Some(m) = m.subcommand_matches("msg") {
         return decode_message_command(m, config).await;
     }
-    if let Some(m) = m.subcommand_matches("account") {
+    if let Some(m) = m.subcommand_matches("account_messages") {
         return decode_account_command(m, config).await;
     }
     if let Some(m) = m.subcommand_matches("stateinit") {
@@ -277,7 +277,7 @@ async fn decode_account_command(m: &ArgMatches<'_>, config: &Config) -> Result<(
         .map_err(|_| "Failed to convert number to integer".to_string())?;
     let bocs = query_messages_for_account(ton_client, &address, number).await?;
     for (num, boc) in bocs.iter().enumerate() {
-        println!("\n{num}  {}\n", boc.1);
+        println!("\n{num} id {} created_at {}\n", boc.1, boc.2);
         let message_bytes = base64::decode(&boc.0)
             .map_err(|e2| format!("Failed to decode queried message: {e2}"))?;
         println!(
