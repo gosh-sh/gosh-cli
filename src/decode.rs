@@ -277,8 +277,8 @@ async fn decode_account_command(m: &ArgMatches<'_>, config: &Config) -> Result<(
         .map_err(|_| "Failed to convert number to integer".to_string())?;
     let bocs = query_messages_for_account(ton_client, &address, number).await?;
     for (num, boc) in bocs.iter().enumerate() {
-        println!("\n{num} id {} created_at {}\n", boc.1, boc.2);
-        let message_bytes = base64::decode(&boc.0)
+        println!("\n{num} id {} created_at {}\nParent message id {}\nIs dst transaction aborted: {}\n", boc.id, boc.created_at, boc.src_msg, boc.dst_aborted);
+        let message_bytes = base64::decode(&boc.boc)
             .map_err(|e2| format!("Failed to decode queried message: {e2}"))?;
         println!(
             "{}",

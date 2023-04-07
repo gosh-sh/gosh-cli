@@ -266,24 +266,32 @@ pub async fn query_with_limit(
     .map(|r| r.result)
 }
 
+pub struct MessageDetails {
+    pub boc: String,
+    pub id: String,
+    pub created_at: u64,
+    pub src_msg: String,
+    pub dst_aborted: bool,
+}
+
 pub async fn query_messages_for_account(
     ton: TonClient,
     account: &str,
     number: u32,
-) -> Result<Vec<(String, String, u64)>, String> {
-    let mut res: Vec<(String, String, u64)> = vec![];
-    let mut last_created: Option<u64> = None;
+) -> Result<Vec<MessageDetails>, String> {
+    let mut res: Vec<MessageDetails> = vec![];
+    let mut last_created: Option<String> = None;
     'ext: loop {
-        let start = last_created.unwrap_or(u64::MAX);
+        let start = last_created.unwrap_or(format!("{}", u64::MAX));
         let rest = 50;
         let messages = query_with_limit(
             ton.clone(),
             "messages",
             json!({
             "dst": { "eq": account },
-            "created_at": { "lt": start }
+            "created_lt": { "lt": start }
         }),
-            "boc, id, created_at, created_lt(format: DEC)",
+            "boc id created_at created_lt(format: DEC) src_transaction{ in_msg } dst_transaction { aborted }",
             Some(vec![OrderBy {
                 path: "created_at".to_string(),
                 direction: SortDirection::DESC,
@@ -295,7 +303,7 @@ pub async fn query_messages_for_account(
         if messages.is_empty() {
             break;
         } else {
-            let mut new_created = 0;
+            let mut new_created = "".to_string();
             for msg in messages {
                 let boc = msg["boc"]
                     .as_str()
@@ -305,21 +313,28 @@ pub async fn query_messages_for_account(
                     .as_str()
                     .ok_or(format!("Failed to get message id"))?
                     .to_string();
-                let created = msg["created_at"]
+                let created_at = msg["created_at"]
                     .as_u64()
                     .ok_or(format!("Failed to get message created_at"))?;
-                if res.iter().find(|el| (**el).1 == id).is_none() {
-                    res.push((boc, id, created));
-                    new_created = created;
+                let src_msg = msg["src_transaction"]["in_msg"]
+                    .as_str()
+                    .ok_or(format!("Failed to get parent messaged id"))?
+                    .to_string();
+                let dst_aborted = msg["dst_transaction"]["aborted"]
+                    .as_bool()
+                    .ok_or(format!("Failed to get dst_aborted flag"))?;
+                if res.iter().find(|el| (**el).id == id).is_none() {
+                    res.push(MessageDetails { boc, id, created_at, src_msg, dst_aborted});
+                    new_created = msg["created_lt"].as_str().ok_or(format!("Failed to get created_lt"))?.to_string();
                     if res.len() == number as usize {
                         break 'ext;
                     }
                 }
             }
-            if new_created == 0 {
+            if new_created == "" {
                 break 'ext;
             } else {
-                last_created = Some(new_created);
+                last_created = Some(new_created.to_string());
             }
         }
     }
