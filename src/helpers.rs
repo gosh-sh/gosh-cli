@@ -318,14 +318,14 @@ pub async fn query_messages_for_account(
                     .ok_or(format!("Failed to get message created_at"))?;
                 let src_msg = msg["src_transaction"]["in_msg"]
                     .as_str()
-                    .ok_or(format!("Failed to get parent messaged id"))?
+                    .unwrap_or("undefined")
                     .to_string();
                 let dst_aborted = msg["dst_transaction"]["aborted"]
                     .as_bool()
                     .ok_or(format!("Failed to get dst_aborted flag"))?;
                 if res.iter().find(|el| (**el).id == id).is_none() {
                     res.push(MessageDetails { boc, id, created_at, src_msg, dst_aborted});
-                    new_created = msg["created_lt"].as_str().ok_or(format!("Failed to get created_lt"))?.to_string();
+                    new_created = msg["created_lt"].as_str().unwrap_or("undefined").to_string();
                     if res.len() == number as usize {
                         break 'ext;
                     }
