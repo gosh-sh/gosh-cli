@@ -34,7 +34,7 @@ use ton_client::abi::{
 use ton_client::error::ClientError;
 use ton_client::processing::{
     send_message, wait_for_transaction, ParamsOfProcessMessage, ParamsOfSendMessage,
-    ParamsOfWaitForTransaction,
+    ParamsOfWaitForTransaction, ProcessingEvent,
 };
 use ton_client::tvm::{run_executor, AccountForExecutor, ParamsOfRunExecutor};
 
@@ -226,18 +226,81 @@ pub async fn send_message_and_wait(
     }
 }
 
+fn processing_event_to_string(pe: ProcessingEvent) -> String {
+    match pe {
+        ProcessingEvent::WillSend {
+            shard_block_id,
+            message_id,
+            message: _,
+        } => format!(
+            "\nWillSend: {{\n\t\
+shard_block_id: \"{shard_block_id}\",\n\t\
+message_id: \"{message_id}\"\n}}"
+        ),
+        ProcessingEvent::DidSend {
+            shard_block_id,
+            message_id,
+            message: _,
+        } => format!(
+            "\nDidSend: {{\n\t\
+shard_block_id: \"{shard_block_id}\",\n\t\
+message_id: \"{message_id}\"\n}}"
+        ),
+        ProcessingEvent::SendFailed {
+            shard_block_id,
+            message_id,
+            message: _,
+            error,
+        } => format!(
+            "\nSendFailed: {{\n\t\
+shard_block_id: \"{shard_block_id}\",\n\t\
+message_id: \"{message_id}\"\n\t\
+error: \"{error}\"\n}}"
+        ),
+        ProcessingEvent::WillFetchNextBlock {
+            shard_block_id,
+            message_id,
+            message: _,
+        } => format!(
+            "\nWillFetchNextBlock: {{\n\t\
+shard_block_id: \"{shard_block_id}\",\n\t\
+message_id: \"{message_id}\"\n}}"
+        ),
+        ProcessingEvent::FetchNextBlockFailed {
+            shard_block_id,
+            message_id,
+            message: _,
+            error,
+        } => format!(
+            "\nFetchNextBlockFailed: {{\n\t\
+shard_block_id: \"{shard_block_id}\",\n\t\
+message_id: \"{message_id}\"\n\t\
+error: \"{error}\"\n}}"
+        ),
+        ProcessingEvent::MessageExpired {
+            message_id,
+            message: _,
+            error,
+        } => format!(
+            "\nMessageExpired: {{\n\t\
+error: \"{error}\",\n\t\
+message_id: \"{message_id}\"\n}}"
+        ),
+
+        _ => format!("{:#?}", pe),
+    }
+}
+
 pub async fn process_message(
     ton: TonClient,
     msg: ParamsOfEncodeMessage,
     config: &Config,
 ) -> Result<Value, ClientError> {
-    let callback = |event| {
-        async move {
-            // if let ProcessingEvent::DidSend { shard_block_id: _, message_id, message: _ } = event {
-            //     println!("MessageId: {}", message_id)
-            // }
-            println!("MessageId: {:?}", event);
-        }
+    let callback = |event| async move {
+        println!(
+            "Process message event: {}",
+            processing_event_to_string(event)
+        );
     };
 
     let mut process_with_timeout: JoinSet<Result<Value, ClientError>> = JoinSet::new();

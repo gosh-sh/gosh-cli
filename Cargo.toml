@@ -18,7 +18,7 @@ license = 'Apache-2.0'
 name = 'gosh-cli'
 readme = 'README.md'
 repository = 'https://github.com/gosh-sh/gosh-cli'
-version = '0.2.0'
+version = '0.3.0'
 
 [features]
 sold = ["dep:sold"]
@@ -38,6 +38,7 @@ lazy_static = '1.4'
 num-bigint = '0.4'
 num-traits = '0.2'
 qr2term = '0.2'
+proc-macro2 = "=1.0.46"
 regex = '1.5'
 reqwest = '0.11'
 serde_derive = '1.0'

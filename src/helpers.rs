@@ -32,7 +32,9 @@ use ton_client::abi::{
 };
 use ton_client::crypto::{CryptoConfig, KeyPair};
 use ton_client::error::ClientError;
-use ton_client::net::{query_collection, NetworkConfig, OrderBy, ParamsOfQueryCollection};
+use ton_client::net::{
+    query_collection, NetworkConfig, OrderBy, ParamsOfQueryCollection, SortDirection,
+};
 use ton_client::{ClientConfig, ClientContext};
 use ton_executor::BlockchainConfig;
 use url::Url;
@@ -262,6 +264,87 @@ pub async fn query_with_limit(
     )
     .await
     .map(|r| r.result)
+}
+
+pub struct MessageDetails {
+    pub boc: String,
+    pub id: String,
+    pub created_at: u64,
+    pub src_msg: String,
+    pub dst_aborted: bool,
+}
+
+pub async fn query_messages_for_account(
+    ton: TonClient,
+    account: &str,
+    number: u32,
+) -> Result<Vec<MessageDetails>, String> {
+    let mut res: Vec<MessageDetails> = vec![];
+    let mut last_created: Option<String> = None;
+    'ext: loop {
+        let start = last_created.unwrap_or(format!("{}", u64::MAX));
+        let rest = 50;
+        let messages = query_with_limit(
+            ton.clone(),
+            "messages",
+            json!({
+            "dst": { "eq": account },
+            "created_lt": { "lt": start }
+        }),
+            "boc id created_at created_lt(format: DEC) src_transaction{ in_msg } dst_transaction { aborted }",
+            Some(vec![OrderBy {
+                path: "created_at".to_string(),
+                direction: SortDirection::DESC,
+            }]),
+            Some(rest),
+        )
+            .await
+            .map_err(|e| format!("failed to query messages data: {}", e))?;
+        if messages.is_empty() {
+            break;
+        } else {
+            let mut new_created = "".to_string();
+            for msg in messages {
+                let boc = msg["boc"]
+                    .as_str()
+                    .ok_or(format!("Failed to get message boc"))?
+                    .to_string();
+                let id = msg["id"]
+                    .as_str()
+                    .ok_or(format!("Failed to get message id"))?
+                    .to_string();
+                let created_at = msg["created_at"]
+                    .as_u64()
+                    .ok_or(format!("Failed to get message created_at"))?;
+                let src_msg = msg["src_transaction"]["in_msg"]
+                    .as_str()
+                    .unwrap_or("undefined")
+                    .to_string();
+                let dst_aborted = msg["dst_transaction"]["aborted"]
+                    .as_bool()
+                    .ok_or(format!("Failed to get dst_aborted flag"))?;
+                if res.iter().find(|el| (**el).id == id).is_none() {
+                    res.push(MessageDetails { boc, id, created_at, src_msg, dst_aborted});
+                    new_created = msg["created_lt"].as_str().unwrap_or("undefined").to_string();
+                    if res.len() == number as usize {
+                        break 'ext;
+                    }
+                }
+            }
+            if new_created == "" {
+                break 'ext;
+            } else {
+                last_created = Some(new_created.to_string());
+            }
+        }
+    }
+
+    if res.is_empty() {
+        Err("messages for the specified account were not found.".to_string())
+    } else {
+        Ok(res)
+    }
+
 }
 
 pub async fn query_message(ton: TonClient, message_id: &str) -> Result<String, String> {
@@ -678,16 +761,40 @@ pub fn check_file_exists(path: &str, trim: &[&str], ending: &[&str]) -> Option<S
     }
     None
 }
-
 pub fn abi_from_matches_or_config(
     matches: &ArgMatches<'_>,
     config: &Config,
 ) -> Result<String, String> {
-    matches
+    load_abi_from_matches_or_config(matches, config, None)
+}
+
+
+pub fn load_abi_from_matches_or_config(
+    matches: &ArgMatches<'_>,
+    config: &Config,
+    default: Option<String>
+) -> Result<String, String> {
+    match matches
         .value_of("ABI")
         .map(|s| s.to_string())
         .or(config.abi_path.clone())
-        .ok_or("ABI file is not defined. Supply it in the config file or command line.".to_string())
+        .or(default)
+        .ok_or("ABI file is not defined. Supply it in the config file or command line.".to_string()) {
+        Ok(abi) => {
+            let abi_dir = config.abi_dir.clone().unwrap_or("./".to_string());
+            let potential_abi_path = format!("{}{}.abi.json", abi_dir, abi);
+            if std::path::Path::new(&potential_abi_path).exists() {
+                if !config.is_json {
+                    println!("ABI path: {potential_abi_path}");
+                }
+                return Ok(potential_abi_path);
+            }
+            Ok(abi)
+        },
+        Err(e) => {
+            Err(e)
+        }
+    }
 }
 
 pub fn parse_lifetime(lifetime: Option<&str>, config: &Config) -> Result<u32, String> {
@@ -767,14 +874,7 @@ pub fn contract_data_from_matches_or_config_alias(
     } else {
         (Some(address), None, None)
     };
-    let abi = matches
-        .value_of("ABI")
-        .map(|s| s.to_string())
-        .or(full_config.config.abi_path.clone())
-        .or(abi)
-        .ok_or(
-            "ABI file is not defined. Supply it in the config file or command line.".to_string(),
-        )?;
+    let abi = load_abi_from_matches_or_config(matches, &full_config.config, abi)?;
     let keys = matches
         .value_of("KEYS")
         .map(|s| s.to_string())
