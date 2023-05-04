@@ -80,6 +80,7 @@ pub struct Config {
     pub wallet: Option<String>,
     pub pubkey: Option<String>,
     pub abi_path: Option<String>,
+    pub abi_dir: Option<String>,
     pub keys_path: Option<String>,
     #[serde(default = "default_retries")]
     pub retries: u8,
@@ -143,6 +144,7 @@ impl Default for Config {
             wallet: None,
             pubkey: None,
             abi_path: None,
+            abi_dir: None,
             keys_path: None,
             retries: default_retries(),
             timeout: default_timeout(),
@@ -184,6 +186,7 @@ impl Config {
             wallet: None,
             pubkey: None,
             abi_path: None,
+            abi_dir: None,
             keys_path: None,
             retries: default_retries(),
             timeout: default_timeout(),
@@ -430,6 +433,14 @@ pub fn set_config(
     }
     if let Some(s) = matches.value_of("ABI") {
         config.abi_path = Some(s.to_string());
+    }
+    if let Some(s) = matches.value_of("ABI_DIR") {
+        let abi_dir = if s.ends_with('/') {
+            s.to_string()
+        } else {
+            format!("{s}/")
+        };
+        config.abi_dir = Some(abi_dir);
     }
     if let Some(s) = matches.value_of("KEYS") {
         config.keys_path = Some(s.to_string());

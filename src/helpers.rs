@@ -761,16 +761,40 @@ pub fn check_file_exists(path: &str, trim: &[&str], ending: &[&str]) -> Option<S
     }
     None
 }
-
 pub fn abi_from_matches_or_config(
     matches: &ArgMatches<'_>,
     config: &Config,
 ) -> Result<String, String> {
-    matches
+    load_abi_from_matches_or_config(matches, config, None)
+}
+
+
+pub fn load_abi_from_matches_or_config(
+    matches: &ArgMatches<'_>,
+    config: &Config,
+    default: Option<String>
+) -> Result<String, String> {
+    match matches
         .value_of("ABI")
         .map(|s| s.to_string())
         .or(config.abi_path.clone())
-        .ok_or("ABI file is not defined. Supply it in the config file or command line.".to_string())
+        .or(default)
+        .ok_or("ABI file is not defined. Supply it in the config file or command line.".to_string()) {
+        Ok(abi) => {
+            let abi_dir = config.abi_dir.clone().unwrap_or("./".to_string());
+            let potential_abi_path = format!("{}{}.abi.json", abi_dir, abi);
+            if std::path::Path::new(&potential_abi_path).exists() {
+                if !config.is_json {
+                    println!("ABI path: {potential_abi_path}");
+                }
+                return Ok(potential_abi_path);
+            }
+            Ok(abi)
+        },
+        Err(e) => {
+            Err(e)
+        }
+    }
 }
 
 pub fn parse_lifetime(lifetime: Option<&str>, config: &Config) -> Result<u32, String> {
@@ -850,14 +874,7 @@ pub fn contract_data_from_matches_or_config_alias(
     } else {
         (Some(address), None, None)
     };
-    let abi = matches
-        .value_of("ABI")
-        .map(|s| s.to_string())
-        .or(full_config.config.abi_path.clone())
-        .or(abi)
-        .ok_or(
-            "ABI file is not defined. Supply it in the config file or command line.".to_string(),
-        )?;
+    let abi = load_abi_from_matches_or_config(matches, &full_config.config, abi)?;
     let keys = matches
         .value_of("KEYS")
         .map(|s| s.to_string())
