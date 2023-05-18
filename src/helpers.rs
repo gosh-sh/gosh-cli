@@ -272,6 +272,7 @@ pub struct MessageDetails {
     pub created_at: u64,
     pub src_msg: String,
     pub dst_aborted: bool,
+    pub created_lt: String,
 }
 
 pub async fn query_messages_for_account(
@@ -281,8 +282,9 @@ pub async fn query_messages_for_account(
 ) -> Result<Vec<MessageDetails>, String> {
     let mut res: Vec<MessageDetails> = vec![];
     let mut last_created: Option<String> = None;
+    let max_start = format!("{}", u64::MAX);
     'ext: loop {
-        let start = last_created.unwrap_or(format!("{}", u64::MAX));
+        let start = last_created.unwrap_or(max_start.clone());
         let rest = 50;
         let messages = query_with_limit(
             ton.clone(),
@@ -323,9 +325,13 @@ pub async fn query_messages_for_account(
                 let dst_aborted = msg["dst_transaction"]["aborted"]
                     .as_bool()
                     .ok_or(format!("Failed to get dst_aborted flag"))?;
+                let created_lt = msg["created_lt"]
+                    .as_str()
+                    .unwrap_or("0")
+                    .to_string();
                 if res.iter().find(|el| (**el).id == id).is_none() {
-                    res.push(MessageDetails { boc, id, created_at, src_msg, dst_aborted});
-                    new_created = msg["created_lt"].as_str().unwrap_or("undefined").to_string();
+                    res.push(MessageDetails { boc, id, created_at, src_msg, dst_aborted, created_lt});
+                    new_created = msg["created_lt"].as_str().map(|s| s.to_string()).unwrap_or(max_start.clone());
                     if res.len() == number as usize {
                         break 'ext;
                     }
@@ -338,6 +344,7 @@ pub async fn query_messages_for_account(
             }
         }
     }
+    res.sort_by(|a, b| b.created_lt.cmp(&a.created_lt));
 
     if res.is_empty() {
         Err("messages for the specified account were not found.".to_string())
@@ -782,7 +789,11 @@ pub fn load_abi_from_matches_or_config(
         .ok_or("ABI file is not defined. Supply it in the config file or command line.".to_string()) {
         Ok(abi) => {
             let abi_dir = config.abi_dir.clone().unwrap_or("./".to_string());
-            let potential_abi_path = format!("{}{}.abi.json", abi_dir, abi);
+            let potential_abi_path = if abi.ends_with(".abi.json") {
+                abi.clone()
+            } else {
+                format!("{}{}.abi.json", abi_dir, abi)
+            };
             if std::path::Path::new(&potential_abi_path).exists() {
                 if !config.is_json {
                     println!("ABI path: {potential_abi_path}");
