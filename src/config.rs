@@ -222,7 +222,7 @@ lazy_static! {
 }
 
 pub fn resolve_net_name(url: &str) -> Option<Vec<String>> {
-    if url.contains("127.0.0.1") || url.contains("0.0.0.0") || url.contains("localhost") {
+    if url == "127.0.0.1" || url == "0.0.0.0" || url == "localhost" {
         return Some(SE_ENDPOINTS.to_owned());
     }
     if url == "network.gosh.sh" || url == "gosh.sh" || url == "gosh" {

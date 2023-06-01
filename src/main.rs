@@ -1575,11 +1575,9 @@ fn config_command(
             full_config.print_aliases();
             return Ok(());
         } else {
-            if matches.args.is_empty() {
-                return Err("At least one option must be specified".to_string());
+            if !matches.args.is_empty() {
+                result = set_config(&mut full_config, matches, is_json);
             }
-
-            result = set_config(&mut full_config, matches, is_json);
         }
     }
     println!(
