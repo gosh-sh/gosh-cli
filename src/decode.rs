@@ -275,9 +275,10 @@ async fn decode_account_command(m: &ArgMatches<'_>, config: &Config) -> Result<(
     let ton_client = create_client(config)?;
     let number = u32::from_str_radix(m.value_of("NUMBER").unwrap_or("10"), 10)
         .map_err(|_| "Failed to convert number to integer".to_string())?;
-    let bocs = query_messages_for_account(ton_client, &address, number).await?;
+    let bocs = query_messages_for_account(ton_client, &address, number).await
+        .map_err(|e| e.to_string())?;
     for (num, boc) in bocs.iter().enumerate() {
-        println!("\n{num} id {} created_at {}\nParent message id {}\nIs dst transaction aborted: {}\n", boc.id, boc.created_at, boc.src_msg, boc.dst_aborted);
+        println!("\n{num} id {} created_at {}\nParent message id {}\nIs dst transaction aborted: {}\n", boc.id, boc.created_at, boc.src_transaction.in_msg, boc.dst_transaction.aborted);
         let message_bytes = base64::decode(&boc.boc)
             .map_err(|e2| format!("Failed to decode queried message: {e2}"))?;
         println!(

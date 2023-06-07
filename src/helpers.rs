@@ -22,6 +22,7 @@ use serde_json::{json, Value};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use serde_derive::Deserialize;
 use ton_block::{
     Account, CurrencyCollection, Deserializable, MsgAddressInt, Serializable, StateInit,
 };
@@ -32,9 +33,7 @@ use ton_client::abi::{
 };
 use ton_client::crypto::{CryptoConfig, KeyPair};
 use ton_client::error::ClientError;
-use ton_client::net::{
-    query_collection, NetworkConfig, OrderBy, ParamsOfQueryCollection, SortDirection,
-};
+use ton_client::net::{query_collection, NetworkConfig, OrderBy, ParamsOfQueryCollection, ParamsOfQuery};
 use ton_client::{ClientConfig, ClientContext};
 use ton_executor::BlockchainConfig;
 use url::Url;
@@ -266,92 +265,117 @@ pub async fn query_with_limit(
     .map(|r| r.result)
 }
 
+#[derive(Deserialize, Debug, Clone)]
+pub struct SrcTrans {
+    pub in_msg: String,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct DstTrans {
+    pub aborted: bool,
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct MessageDetails {
     pub boc: String,
+    pub body: Option<String>,
     pub id: String,
     pub created_at: u64,
-    pub src_msg: String,
-    pub dst_aborted: bool,
-    pub created_lt: String,
+    pub src_transaction: SrcTrans,
+    pub dst_transaction: DstTrans,
+    #[serde(with = "ton_sdk::json_helper::uint")]
+    pub created_lt: u64,
+}
+
+#[derive(Deserialize, Debug)]
+struct Node {
+    #[serde(rename = "node")]
+    message: MessageDetails,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct PageInfo {
+    has_previous_page: bool,
+    start_cursor: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct Messages {
+    edges: Vec<Node>,
+    page_info: PageInfo,
 }
 
 pub async fn query_messages_for_account(
     ton: TonClient,
     account: &str,
     number: u32,
-) -> Result<Vec<MessageDetails>, String> {
-    let mut res: Vec<MessageDetails> = vec![];
-    let mut last_created: Option<String> = None;
-    let max_start = format!("{}", u64::MAX);
+) -> anyhow::Result<Vec<MessageDetails>> {
+
+    let query = r#"query($addr: String!, $before: String){
+      blockchain {
+        account(address: $addr) {
+          messages(before: $before, last: 50) {
+            edges {
+              node {  boc id created_at created_lt src_transaction{ in_msg } dst_transaction { aborted } }
+            }
+            pageInfo { hasPreviousPage startCursor }
+          }
+        }
+      }
+    }"#
+        .to_string();
+
+    let mut before = "".to_string();
+    let dst_address = account.to_string();
+    let mut result_messages = vec![];
+
     'ext: loop {
-        let start = last_created.unwrap_or(max_start.clone());
-        let rest = 50;
-        let messages = query_with_limit(
-            ton.clone(),
-            "messages",
-            json!({
-            "dst": { "eq": account },
-            "created_lt": { "lt": start }
-        }),
-            "boc id created_at created_lt(format: DEC) src_transaction{ in_msg } dst_transaction { aborted }",
-            Some(vec![OrderBy {
-                path: "created_at".to_string(),
-                direction: SortDirection::DESC,
-            }]),
-            Some(rest),
+        let result = ton_client::net::query(
+            Arc::clone(&ton),
+            ParamsOfQuery {
+                query: query.clone(),
+                variables: Some(json!({
+                    "addr": dst_address.clone(),
+                    "before": before
+                })),
+                ..Default::default()
+            },
         )
             .await
-            .map_err(|e| format!("failed to query messages data: {}", e))?;
-        if messages.is_empty() {
-            break;
-        } else {
-            let mut new_created = "".to_string();
-            for msg in messages {
-                let boc = msg["boc"]
-                    .as_str()
-                    .ok_or(format!("Failed to get message boc"))?
-                    .to_string();
-                let id = msg["id"]
-                    .as_str()
-                    .ok_or(format!("Failed to get message id"))?
-                    .to_string();
-                let created_at = msg["created_at"]
-                    .as_u64()
-                    .ok_or(format!("Failed to get message created_at"))?;
-                let src_msg = msg["src_transaction"]["in_msg"]
-                    .as_str()
-                    .unwrap_or("undefined")
-                    .to_string();
-                let dst_aborted = msg["dst_transaction"]["aborted"]
-                    .as_bool()
-                    .ok_or(format!("Failed to get dst_aborted flag"))?;
-                let created_lt = msg["created_lt"]
-                    .as_str()
-                    .unwrap_or("0")
-                    .to_string();
-                if res.iter().find(|el| (**el).id == id).is_none() {
-                    res.push(MessageDetails { boc, id, created_at, src_msg, dst_aborted, created_lt});
-                    new_created = msg["created_lt"].as_str().map(|s| s.to_string()).unwrap_or(max_start.clone());
-                    if res.len() == number as usize {
-                        break 'ext;
-                    }
-                }
-            }
-            if new_created == "" {
+            .map(|r| r.result)?;
+        let nodes = &result["data"]["blockchain"]["account"]["messages"];
+        let edges: Messages = serde_json::from_value(nodes.clone())?;
+
+        let messages: Vec<MessageDetails> = edges
+            .edges
+            .iter()
+            .map(|node| MessageDetails {
+                id: node.message.id.split('/').last().unwrap().to_string(),
+                body: node.message.body.clone(),
+                created_lt: node.message.created_lt.clone(),
+                boc: node.message.boc.clone(),
+                created_at: node.message.created_at,
+                src_transaction: node.message.src_transaction.clone(),
+                dst_transaction: node.message.dst_transaction.clone(),
+            })
+            .collect();
+
+        before = edges.page_info.start_cursor;
+        for message in messages {
+            result_messages.push(message);
+            if result_messages.len() == number as usize {
                 break 'ext;
-            } else {
-                last_created = Some(new_created.to_string());
             }
         }
-    }
-    res.sort_by(|a, b| b.created_lt.cmp(&a.created_lt));
 
-    if res.is_empty() {
-        Err("messages for the specified account were not found.".to_string())
-    } else {
-        Ok(res)
+        if !edges.page_info.has_previous_page {
+            break;
+        }
     }
-
+    result_messages.sort_by(|a, b| b.created_lt.cmp(&a.created_lt));
+    Ok(result_messages)
 }
 
 pub async fn query_message(ton: TonClient, message_id: &str) -> Result<String, String> {
