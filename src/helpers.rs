@@ -281,7 +281,7 @@ pub struct MessageDetails {
     pub body: Option<String>,
     pub id: String,
     pub created_at: u64,
-    pub src_transaction: SrcTrans,
+    pub src_transaction: Option<SrcTrans>,
     pub dst_transaction: DstTrans,
     #[serde(with = "ton_sdk::json_helper::uint")]
     pub created_lt: u64,
@@ -344,9 +344,11 @@ pub async fn query_messages_for_account(
             },
         )
             .await
-            .map(|r| r.result)?;
+            .map(|r| r.result)
+            .map_err(|e| anyhow::format_err!("Failed to query data: {e}"))?;
         let nodes = &result["data"]["blockchain"]["account"]["messages"];
-        let edges: Messages = serde_json::from_value(nodes.clone())?;
+        let edges: Messages = serde_json::from_value(nodes.clone())
+            .map_err(|e| anyhow::format_err!("Failed to deserialize query result: {e}"))?;
 
         let messages: Vec<MessageDetails> = edges
             .edges

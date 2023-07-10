@@ -278,7 +278,7 @@ async fn decode_account_command(m: &ArgMatches<'_>, config: &Config) -> Result<(
     let bocs = query_messages_for_account(ton_client, &address, number).await
         .map_err(|e| e.to_string())?;
     for (num, boc) in bocs.iter().enumerate() {
-        println!("\n{num} id {} created_at {}\nParent message id {}\nIs dst transaction aborted: {}\n", boc.id, boc.created_at, boc.src_transaction.in_msg, boc.dst_transaction.aborted);
+        println!("\n{num} id {} created_at {}\nParent message id {}\nIs dst transaction aborted: {}\n", boc.id, boc.created_at, boc.src_transaction.clone().map(|v| v.in_msg).unwrap_or("".to_string()), boc.dst_transaction.aborted);
         let message_bytes = base64::decode(&boc.boc)
             .map_err(|e2| format!("Failed to decode queried message: {e2}"))?;
         println!(
