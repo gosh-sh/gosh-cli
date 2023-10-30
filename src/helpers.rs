@@ -183,6 +183,7 @@ pub fn create_client(config: &Config) -> Result<TonClient, String> {
         },
         ..Default::default()
     };
+
     let cli =
         ClientContext::new(cli_conf).map_err(|e| format!("failed to create tonclient: {}", e))?;
     Ok(Arc::new(cli))
@@ -312,11 +313,11 @@ pub async fn query_messages_for_account(
     account: &str,
     number: u32,
 ) -> anyhow::Result<Vec<MessageDetails>> {
-
+    // , msg_type: ExtIn | IntIn
     let query = r#"query($addr: String!, $before: String){
       blockchain {
         account(address: $addr) {
-          messages(before: $before, last: 50) {
+          messages(before: $before, last: 20, msg_type: [ExtIn, IntIn]) {
             edges {
               node {  boc id created_at created_lt src_transaction{ in_msg } dst_transaction { aborted } }
             }

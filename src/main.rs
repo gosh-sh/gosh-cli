@@ -868,6 +868,7 @@ async fn main_internal() -> Result<(), String> {
         );
 
     let sendfile_cmd = SubCommand::with_name("sendfile")
+        .setting(AppSettings::AllowLeadingHyphen)
         .about("Sends the boc file with an external inbound message to account.")
         .arg(
             Arg::with_name("BOC")

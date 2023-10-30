@@ -501,7 +501,7 @@ async fn decode_message(msg_boc: Vec<u8>, abi_path: Option<String>) -> Result<St
     let tvm_msg = ton_sdk::Contract::deserialize_message(&msg_boc[..])
         .map_err(|e| format!("failed to deserialize message boc: {}", e))?;
     let config = Config::default();
-    let result = msg_printer::serialize_msg(&tvm_msg, abi_path, &config).await?;
+    let result = msg_printer::serialize_msg(&tvm_msg, abi_path, &config, false).await?;
     serde_json::to_string_pretty(&result)
         .map_err(|e| format!("Failed to serialize the result: {}", e))
 }
@@ -720,17 +720,24 @@ pub mod msg_printer {
         msg: &Message,
         abi_path: Option<String>,
         config: &Config,
+        long_fields: bool,
     ) -> Result<Value, String> {
         let mut res = json!({});
         let ton = create_client_local()?;
         res["Type"] = serialize_msg_type(msg.header());
         res["Header"] = serialize_msg_header(msg.header());
         if msg.state_init().is_some() {
-            res["Init"] = json!({"StateInit" : serialize_state_init(msg.state_init().unwrap(), ton.clone()).await?});
+            if long_fields {
+                res["Init"] = json!({"StateInit" : serialize_state_init(msg.state_init().unwrap(), ton.clone()).await?});
+            } else {
+                res["Init"] = json!({"StateInit" : "Present, but skipped"});
+            }
         }
-        res["Body"] = json!(&tree_of_cells_into_base64(
+        if long_fields {
+            res["Body"] = json!(&tree_of_cells_into_base64(
             msg.body().map(|slice| slice.into_cell()).as_ref()
         )?);
+        }
         if abi_path.is_some() && msg.body().is_some() {
             let abi_path = abi_path.unwrap();
             let mut body_vec = Vec::new();

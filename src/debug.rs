@@ -990,7 +990,7 @@ async fn decode_messages(
 
     let mut res = vec![];
     for msg in msgs {
-        let mut ser_msg = serialize_msg(&msg.0, abi.clone(), config)
+        let mut ser_msg = serialize_msg(&msg.0, abi.clone(), config, true)
             .await
             .map_err(|e| format!("Failed to serialize message: {}", e))?;
         let msg_str = base64::encode(
@@ -1253,17 +1253,18 @@ fn generate_callback(
                 },
                 _ => None,
             };
-            Some(if matches.is_present("FULL_TRACE") {
-                Arc::new(move |_, info| trace_callback(info, &debug_info))
-            } else {
-                Arc::new(move |_, info| trace_callback_minimal(info, &debug_info))
-            })
+            // Some(if matches.is_present("FULL_TRACE") {
+                Some(Arc::new(move |_, info| trace_callback(info, &debug_info)))
+            // } else {
+            //     Arc::new(move |_, info| trace_callback_minimal(info, &debug_info))
+            // })
         }
-        _ => Some(if config.debug_fail == *"Full" {
-            Arc::new(move |_, info| trace_callback(info, &None))
-        } else {
-            Arc::new(move |_, info| trace_callback_minimal(info, &None))
-        }),
+        _ =>
+            // Some(if config.debug_fail == *"Full" {
+            Some(Arc::new(move |_, info| trace_callback(info, &None)))
+        // } else {
+        //     Arc::new(move |_, info| trace_callback_minimal(info, &None))
+        // }),
     }
 }
 

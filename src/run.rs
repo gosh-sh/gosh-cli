@@ -160,6 +160,8 @@ async fn run(
     )
     .await;
 
+    // eprintln!("getter res: {result:?}");
+
     if config.debug_fail != *"None"
         && result.is_err()
         && result.clone().err().unwrap().code == SDK_EXECUTION_ERROR_CODE

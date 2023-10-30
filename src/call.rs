@@ -115,7 +115,14 @@ async fn build_json_from_params(
                     }
                 }
                 json!(result_vec)
-            }
+            },
+            ParamType::Optional(_) => {
+                if value == "null" {
+                    Value::Null
+                } else {
+                    json!(value)
+                }
+            },
             _ => {
                 json!(value)
             }
