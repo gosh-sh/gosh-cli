@@ -39,7 +39,7 @@ lazy_static = '1.4'
 num-bigint = '0.4'
 num-traits = '0.2'
 qr2term = '0.2'
-proc-macro2 = "=1.0.46"
+# proc-macro2 = "=1.0.46"
 regex = '1.5'
 reqwest = '0.11'
 serde_derive = '1.0'
@@ -57,7 +57,7 @@ ton_block_json = { git = 'https://github.com/tonlabs/ton-labs-block-json.git', t
 ton_client = { git = 'https://github.com/tonlabs/TON-SDK.git', tag = '1.39.0' }
 ton_executor = { default-features = false, git = 'https://github.com/tonlabs/ton-labs-executor.git', tag = '1.15.139' }
 ton_labs_assembler = { git = 'https://github.com/tonlabs/ton-labs-assembler.git', tag = '1.2.74' }
-ton_sdk = { git = 'https://github.com/tonlabs/TON-SDK.git', tag = '1.39.0' }
+ton_sdk = { git = 'https://github.com/gosh-sh/ever-sdk.git', branch = 'feature/masterchain-free' }
 ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.12.4' }
 ton_vm = { git = 'https://github.com/tonlabs/ton-labs-vm.git', tag = '1.8.79' }
 sold = { git = 'https://github.com/tonlabs/TON-Solidity-Compiler.git', tag = '0.66.0', optional = true }
