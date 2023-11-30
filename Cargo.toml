@@ -20,6 +20,21 @@ readme = 'README.md'
 repository = 'https://github.com/gosh-sh/gosh-cli'
 version = '0.3.1'
 
+[profile.profiling]
+debug = 1
+inherits = 'release'
+
+[profile.dev]
+# Must always use panic = "abort" to avoid needing to define the unstable eh_personality lang item.
+panic = "abort"
+
+[profile.release]
+opt-level = "z"     # Optimize for size.
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations.
+panic = "abort"     # Abort on panic
+strip = true        # Automatically strip symbols from the binary.
+
 [features]
 sold = ["dep:sold"]
 
